@@ -1,1 +1,1 @@
-TagList.delimiter = / |\+|,/
+TagList.delimiter = ','
