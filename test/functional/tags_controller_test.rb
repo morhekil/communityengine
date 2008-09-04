@@ -5,7 +5,7 @@ require 'tags_controller'
 class TagsController; def rescue_action(e) raise e end; end
 
 class TagsControllerTest < Test::Unit::TestCase
-  fixtures :tags, :taggings, :photos, :roles, :posts
+  fixtures :tags, :taggings, :photos, :roles, :posts, :users
 
   def setup
     @controller = TagsController.new
@@ -41,7 +41,7 @@ class TagsControllerTest < Test::Unit::TestCase
     posts(:apt2_post).tag_list = tags(:general).name + ',' + tags(:extra).name + ',' + tags(:misc).name
     posts(:apt2_post).save
 
-    get :show, :id => 'general extra'
+    get :show, :id => 'general,extra'
     assert_response :success
     assert_equal 2, assigns(:posts).size
     assert assigns(:posts).include?(posts(:apt_post))
