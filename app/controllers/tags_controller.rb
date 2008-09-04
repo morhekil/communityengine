@@ -27,7 +27,6 @@ class TagsController < BaseController
     end
     @related_tags = @tags.collect { |tag| tag.related_tags }.flatten.uniq
     @tags_raw = @tags.collect { |t| t.name } .join(',')
-    RAILS_DEFAULT_LOGGER.debug @tags_raw.inspect
 
     if params[:type]
       case params[:type]
