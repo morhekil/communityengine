@@ -16,7 +16,7 @@ class UsersController < BaseController
 
     
   before_filter :login_required, :only => [:edit, :edit_account, :update, :welcome_photo, :welcome_about, 
-                                          :welcome_invite, :return_admin, :assume, :featured, 
+                                          :welcome_invite, :return_admin, :assume, :featured,
                                           :toggle_featured, :edit_pro_details, :update_pro_details, :dashboard]
   before_filter :find_user, :only => [:edit, :edit_pro_details, :show, :update, :destroy, :statistics ]
   before_filter :require_current_user, :only => [:edit, :update, :update_account,
@@ -85,12 +85,14 @@ class UsersController < BaseController
   def create
     @user = User.new(params[:user])
     @user.role = Role[:member]
-    @user.save!
-    create_friendship_with_inviter(@user, params)
-    flash[:notice] = :email_signup_thanks.l_with_args(:email => @user.email) 
-    redirect_to signup_completed_user_path(@user)
-  rescue ActiveRecord::RecordInvalid
-    render :action => 'new'
+
+    if (!AppConfig.require_captcha_on_signup || verify_recaptcha(@user)) && @user.save
+      create_friendship_with_inviter(@user, params)
+      flash[:notice] = :email_signup_thanks.l_with_args(:email => @user.email) 
+      redirect_to signup_completed_user_path(@user.activation_code)
+    else
+      render :action => 'new'
+    end
   end
     
   def edit 
@@ -138,7 +140,7 @@ class UsersController < BaseController
   end
   
   def destroy
-    unless @user.admin?
+    unless @user.admin? || @user.featured_writer?
       @user.destroy
       flash[:notice] = "The user was deleted.".l
     else
@@ -220,7 +222,8 @@ class UsersController < BaseController
   end
   
   def signup_completed
-    @user = User.find(params[:id])
+    @user = User.find_by_activation_code(params[:id])
+    redirect_to home_path and return unless @user
     render :action => 'signup_completed', :layout => 'beta' if AppConfig.closed_beta_mode    
   end
   
@@ -276,6 +279,19 @@ class UsersController < BaseController
     end 
   end
 
+  def resend_activation
+    @user = User.find_by_email(params[:email])
+    return unless request.post?       
+    
+    if @user && !@user.active?
+      flash[:notice] = :activation_email_resent_message.l :admin_email => AppConfig.support_email
+      
+      UserNotifier.deliver_signup_notification(@user)    
+      redirect_to login_path and return
+    else
+      flash[:notice] = :activation_email_not_sent_message.l
+    end
+  end
   
   def assume
     user = User.find(params[:id])
@@ -297,17 +313,23 @@ class UsersController < BaseController
 
   def metro_area_update
     return unless request.xhr?
-    if params[:state_id]
-      metro_areas = MetroArea.find_all_by_state_id(params[:state_id], :order => "name")
-      render :partial => 'shared/location_chooser', :locals => {:states => State.find(:all), :metro_areas => metro_areas, :selected_country => Country.get(:us).id, :selected_state => params[:state_id].to_i, :selected_metro_area => nil }
+    
+    country = Country.find(params[:country_id]) unless params[:country_id].blank?
+    state   = State.find(params[:state_id]) unless params[:state_id].blank?
+    states  = country ? country.states.sort_by{|s| s.name} : []
+    
+    if states.any?
+      metro_areas = state ? state.metro_areas.all(:order => "name") : []
     else
-      if params[:country_id].to_i.eql?(Country.get(:us).id)
-        render :partial => 'shared/location_chooser', :locals => {:states => State.find(:all), :metro_areas => [], :selected_country => params[:country_id].to_i, :selected_state => params[:state_id].to_i, :selected_metro_area => nil }
-      else
-        metro_areas = MetroArea.find_all_by_country_id(params[:country_id], :order => "name")
-        render :partial => 'shared/location_chooser', :locals => {:states => [], :metro_areas => metro_areas, :selected_country => params[:country_id].to_i, :selected_state => nil, :selected_metro_area => nil }
-      end
-    end      
+      metro_areas = country ? country.metro_areas : []
+    end
+
+    render :partial => 'shared/location_chooser', :locals => {
+      :states => states, 
+      :metro_areas => metro_areas, 
+      :selected_country => params[:country_id].to_i, 
+      :selected_state => params[:state_id].to_i, 
+      :selected_metro_area => nil }
   end
   
   def toggle_featured
@@ -348,13 +370,16 @@ class UsersController < BaseController
   end  
   
   def setup_locations_for(user)
-    metro_areas = []
-    if user.state
-      metro_areas = @user.state.metro_areas
-    elsif user.country
-      metro_areas = user.country.metro_areas
+    metro_areas = states = []
+    
+    if user.country
+      states = user.country.states
     end
-    states = user.country.eql?(Country.get(:us)) ? State.find(:all) : []    
+    
+    if user.state
+      metro_areas = user.state.metro_areas.all(:order => "name");
+    end
+    
     return metro_areas, states
   end
 

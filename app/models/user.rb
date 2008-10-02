@@ -1,8 +1,6 @@
 require 'digest/sha1'
 
-class User < ActiveRecord::Base  
-  include ActionController::UrlWriter
-  default_url_options[:host] = APP_URL.sub('http://', '')
+class User < ActiveRecord::Base
   MALE    = 'M'
   FEMALE  = 'F'
 
@@ -18,6 +16,7 @@ class User < ActiveRecord::Base
   attr_accessor :password
   acts_as_taggable  
   acts_as_commentable
+  has_private_messages
   tracks_unlinked_activities [:logged_in, :invited_friends, :updated_profile]  
 
   #validation
@@ -127,11 +126,10 @@ class User < ActiveRecord::Base
   def self.find_by_activity(options = {})
     options.reverse_merge! :limit => 30, :require_avatar => true, :since => 7.days.ago   
     
-    activities = Activity.find(
-      :all, 
+    activities = Activity.since(options[:since]).find(:all, 
       :select => '*, count(*) as count', 
       :group => "activities.user_id", 
-      :conditions => ["activities.created_at > ? #{options[:require_avatar] ? ' AND users.avatar_id IS NOT NULL' : ''}", options[:since]], 
+      :conditions => "#{options[:require_avatar] ? ' users.avatar_id IS NOT NULL' : nil}", 
       :order => 'count DESC', 
       :joins => "LEFT JOIN users ON users.id = activities.user_id",
       :limit => options[:limit]
@@ -220,10 +218,6 @@ class User < ActiveRecord::Base
   end
   
 
-  def generate_invite_url
-    "#{APP_URL}/signup/#{self.to_param}/#{invite_code}"
-  end
-  
   def valid_invite_code?(code)
     code == invite_code
   end
@@ -349,20 +343,24 @@ class User < ActiveRecord::Base
 
   def network_activity(page = {}, since = 1.week.ago)
     page.reverse_merge :size => 10, :current => 1
-    
     ids = self.friends_ids
-    Activity.find(:all, 
-      :conditions => ['user_id in (?) AND created_at > ?', ids, since], 
-      :order => 'created_at DESC',
+    
+    Activity.recent.since(since).by_users(ids).find(:all, :page => page)          
+  end
+
+  def comments_activity(page = {}, since = 1.week.ago)
+    page.reverse_merge :size => 10, :current => 1
+
+    Activity.recent.since(since).find(:all, 
+      :conditions => ['comments.recipient_id = ? AND activities.user_id != ?', self.id, self.id], 
+      :joins => "LEFT JOIN comments ON comments.id = activities.item_id AND activities.item_type = 'Comment'",
       :page => page)      
   end
+
   
   def self.recent_activity(page = {})
     page.reverse_merge! :size => 10, :current => 1
-    
-    Activity.find(:all, 
-      :order => 'created_at DESC',
-      :page => page)      
+    Activity.recent.find(:all, :page => page)      
   end
   
   def friends_ids
@@ -411,17 +409,15 @@ class User < ActiveRecord::Base
     end
   end
   def self.build_search_conditions(query)
-    # query && ['LOWER(display_name) LIKE :q OR LOWER(login) LIKE :q', {:q => "%#{query}%"}]
     query
   end
-  
-  def commentable_url(comment)
-    user_url(comment.recipient)    
-  end
+
+#  def commentable_url(comment)
+#    user_url(comment.recipient)
+#  end
 
 
   protected
-  # If you're going to use activation, uncomment this too
   def make_activation_code
     self.activation_code = Digest::SHA1.hexdigest( Time.now.to_s.split(//).sort_by {rand}.join )
   end

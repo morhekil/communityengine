@@ -20,7 +20,8 @@ class TagsController < BaseController
   
   def show
     tag_names = params[:id]
-    @tags = Tag.find( :all, :conditions => [ 'name IN (?)', TagList.from(tag_names) ] )
+
+    @tags = Tag.find(:all, :conditions => [ 'name IN (?)', TagList.from(tag_names) ] )
     if @tags.nil? || @tags.empty?
       flash[:notice] = :tag_does_not_exists.l_with_args(:tag => tag_names)
       redirect_to :action => :index and return
@@ -40,7 +41,7 @@ class TagsController < BaseController
           @pages = @users = User.recent.find_tagged_with(tag_names, :match_all => true, :page => {:size => 30, :current => params[:page]})
           @posts, @photos, @clippings = [], [], []
         when 'Clipping'
-          @pages = @clippings = Clipping.recent.find_tagged_with(tag_names, :match_all => true, :page => {:size => 1, :current => params[:page]})
+          @pages = @clippings = Clipping.recent.find_tagged_with(tag_names, :match_all => true, :page => {:size => 10, :current => params[:page]})
           @posts, @photos, @users = [], [], []
       else
         @clippings, @posts, @photos, @users = [], [], [], []
@@ -48,7 +49,7 @@ class TagsController < BaseController
     else
       @posts = Post.recent.find_tagged_with(tag_names, :match_all => true, :limit => 5)
       @photos = Photo.recent.find_tagged_with(tag_names, :match_all => true, :limit => 10)
-      @users = User.recent.find_tagged_with(tag_names, :match_all => true, :limit => 10)
+      @users = User.recent.find_tagged_with(tag_names, :match_all => true, :limit => 10).uniq
       @clippings = Clipping.recent.find_tagged_with(tag_names, :match_all => true, :limit => 10)
     end
   end

@@ -4,6 +4,14 @@ require 'md5'
 module BaseHelper
 
 
+  def commentable_url(comment)
+    if comment.commentable_type != "User"
+      polymorphic_url([comment.recipient, comment.commentable])+"#comment_#{comment.id}"
+    else
+      user_url(comment.recipient)+"#comment_#{comment.id}"
+    end
+  end
+
 
   def forum_page?
     %w(forums topics sb_posts).include?(@controller.controller_name)
@@ -230,15 +238,21 @@ module BaseHelper
   end
   
   def paginating_links(paginator, options = {}, html_options = {})
-    name = options[:name] || PaginatingFind::Helpers::DEFAULT_OPTIONS[:name]
-    params = (options[:params] || PaginatingFind::Helpers::DEFAULT_OPTIONS[:params]).clone
+    if paginator.page_count > 1
+  		name = options[:name] || PaginatingFind::Helpers::DEFAULT_OPTIONS[:name]
+ 
+    	our_params = (options[:params] || params).clone
+      
+      our_params.delete("authenticity_token")
+      our_params.delete("commit")
 
-    links = paginating_links_each(paginator, options) do |n|
-      params[name] = n
-      link_to(n, params, html_options.merge(:class => (paginator.page.eql?(n) ? 'active' : '')))
+    	links = paginating_links_each(paginator, options) do |n|
+    	  our_params[name] = n
+    	  link_to(n, our_params, html_options.merge(:class => (paginator.page.eql?(n) ? 'active' : '')))
+    	end
     end
-
-    content_tag(:div, pagination_info_for(paginator), :class => 'pagination_info') + links    
+    
+    content_tag(:div, pagination_info_for(paginator), :class => 'pagination_info') + (links || '')
   end  
   
   def pagination_info_for(paginator, options = {})

@@ -1,8 +1,4 @@
 require File.dirname(__FILE__) + '/../test_helper'
-require 'users_controller'
-
-# Re-raise errors caught by the controller.
-class UsersController; def rescue_action(e) raise e end; end
 
 class UsersControllerTest < Test::Unit::TestCase
   # Be sure to include AuthenticatedTestHelper in test/test_helper.rb instead
@@ -71,21 +67,29 @@ class UsersControllerTest < Test::Unit::TestCase
     assert !users(:quentin).reload.featured_writer?
   end
 
-  def test_should_get_welcome_steps
+  def test_should_get_signup_completed
     login_as :quentin
     
-    get :signup_completed, :id => users(:quentin).id
+    get :signup_completed, :id => users(:quentin).activation_code
     assert_response :success
-    
+  end
+  
+  def test_should_get_welcome_photo
+    login_as :quentin  
     get :welcome_photo, :id => users(:quentin).id
     assert_response :success
-
+  end
+  
+  def test_should_get_welcome_about
+    login_as :quentin
     get :welcome_about, :id => users(:quentin).id
     assert_response :success
-
+  end
+  
+  def test_should_get_welcome_invite
+    login_as :quentin
     get :welcome_invite, :id => users(:quentin).id
     assert_response :success
-
   end
   
   def test_should_get_new
@@ -289,6 +293,34 @@ class UsersControllerTest < Test::Unit::TestCase
       assert_redirected_to login_path    
     end
   end
+  
+  def test_should_resend_activation
+    users(:quentin).activation_code = Digest::SHA1.hexdigest( Time.now.to_s.split(//).sort_by {rand}.join )
+    users(:quentin).activated_at = nil
+    users(:quentin).save!
+    
+    assert_difference ActionMailer::Base.deliveries, :length, 1 do
+      post :resend_activation, :email => users(:quentin).email
+      assert_redirected_to login_path    
+    end    
+  end
+  
+  def test_should_not_resend_activation_for_active_user
+    assert_no_difference ActionMailer::Base.deliveries, :length do
+      post :resend_activation, :email => users(:quentin).email
+      assert_response :success
+      assert_equal "Activation e-mail could not be sent. Perhaps that user is already active?", flash[:notice]
+    end    
+  end
+
+  def test_should_not_resend_activation_for_nonexistent_email
+    assert_no_difference ActionMailer::Base.deliveries, :length do
+      post :resend_activation, :email => "foo@bar.com"
+      assert_response :success
+      assert_equal "Activation e-mail could not be sent. Perhaps that user is already active?", flash[:notice]
+    end    
+  end
+
   
   def test_assume_should_assume_users_id
     login_as :admin
