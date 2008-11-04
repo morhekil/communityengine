@@ -17,7 +17,7 @@ class UserNotifier < ActionMailer::Base
   def friendship_request(friendship)
     setup_email(friendship.friend)
     @subject     += "#{friendship.user.login} would like to be friends with you!"
-    @body[:url]  = pending_user_friendships_url(friendship)
+    @body[:url]  = pending_user_friendships_url(friendship.friend)
     @body[:requester] = friendship.user
   end
 
@@ -63,7 +63,7 @@ class UserNotifier < ActionMailer::Base
     @sent_on     = Time.now
     setup_sender_info
     @subject     = "Check out this story on #{AppConfig.community_name}"
-    content_type "text/html"
+    content_type "text/plain"
     @body[:name] = name  
     @body[:title]  = post.title
     @body[:post] = post
@@ -100,7 +100,9 @@ class UserNotifier < ActionMailer::Base
   end
   
   def setup_sender_info
-    @from        = "The #{AppConfig.community_name} Team <#{AppConfig.support_email}>"    
+    @from       = "The #{AppConfig.community_name} Team <#{AppConfig.support_email}>" 
+    headers     "Reply-to" => "#{AppConfig.support_email}"
+    @content_type = "text/plain"           
   end
   
 end

@@ -82,6 +82,7 @@ resources :homepage_features
 resources :metro_areas
 resources :ads
 resources :contests, :member => { :latest => :get }
+resources :activities
 
 resources :users, :member_path => '/:id', :nested_member_path => '/:user_id', :member => { 
     :dashboard => :get,
@@ -102,7 +103,8 @@ resources :users, :member_path => '/:id', :nested_member_path => '/:user_id', :m
     :welcome_stylesheet => :get, 
     :welcome_invite => :get,
     :welcome_complete => :get,
-    :statistics => :any
+    :statistics => :any,
+    :deactivate => :put
      } do |user|
   user.resources :friendships, :member => { :accept => :put, :deny => :put }, :collection => { :accepted => :get, :pending => :get, :denied => :get }
   user.resources :photos, :collection => {:swfupload => :post, :slideshow => :get}
